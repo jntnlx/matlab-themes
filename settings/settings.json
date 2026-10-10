@@ -1,0 +1,77 @@
+{
+    // ---------------------------------------------------------------
+    // Themes: all colour work lives in the MATLAB Themes extension.
+    // Keep colour overrides out of this file; edit palettes.mjs instead.
+    //
+    // Day/evening switching: either Ctrl+K Ctrl+T, or let the OS
+    // light/dark setting do it by setting autoDetectColorScheme to true
+    // (light OS -> MATLAB Light, dark OS -> MATLAB Sepia).
+    // ---------------------------------------------------------------
+    "workbench.colorTheme": "MATLAB Light",
+    "window.autoDetectColorScheme": false,
+    "workbench.preferredLightColorTheme": "MATLAB Light",
+    "workbench.preferredDarkColorTheme": "MATLAB Sepia",
+    "workbench.iconTheme": "vs-seti",
+
+    // ---------------------------------------------------------------
+    // Fonts
+    // MATLAB's own default code font on Windows is Courier New
+    // ("Monospaced" -> Courier New). Alternatives that keep its thin,
+    // wide texture: see fonts/ in this repo and the Code Font Bench.
+    // e.g. "'Source Code Pro Light', 'Courier New', monospace"
+    // ---------------------------------------------------------------
+    "editor.fontFamily": "'Courier New', Consolas, monospace",
+    "editor.fontSize": 12,
+    "editor.lineHeight": 15,
+    "editor.letterSpacing": 0.1,
+    "editor.fontLigatures": false,
+    "terminal.integrated.fontFamily": "Consolas, 'Courier New', monospace",
+    "terminal.integrated.fontSize": 12,
+    "debug.console.fontFamily": "Consolas, 'Courier New', monospace",
+    "debug.console.fontSize": 12,
+    "markdown.preview.fontSize": 12,
+
+    // ---------------------------------------------------------------
+    // Editor: MATLAB-like quiet surface
+    // ---------------------------------------------------------------
+    "editor.cursorStyle": "line-thin",
+    "editor.cursorSmoothCaretAnimation": "off",
+    "editor.smoothScrolling": false,
+    "editor.padding.top": 15,
+    "editor.padding.bottom": 15,
+    "editor.minimap.enabled": false,
+    // "line" shows MATLAB Light's pale-green current line; in the Sepia
+    // themes the line highlight is near-invisible, so this suits both.
+    "editor.renderLineHighlight": "line",
+    // MATLAB's right-hand text limit line sits at column 75.
+    // "editor.rulers": [75],
+    "editor.renderWhitespace": "selection",
+    "editor.wordWrap": "on",
+    "editor.showFoldingControls": "always",
+    "editor.foldingHighlight": false,
+    "editor.selectionHighlight": false,
+    "editor.occurrencesHighlight": "singleFile",
+    "editor.bracketPairColorization.enabled": false,
+    "editor.guides.highlightActiveBracketPair": false,
+    "editor.guides.highlightActiveIndentation": false,
+    "editor.inlayHints.enabled": "off",
+    "editor.scrollbar.horizontal": "visible",
+    "editor.scrollbar.horizontalScrollbarSize": 8,
+    "editor.scrollbar.verticalScrollbarSize": 8,
+
+    // ---------------------------------------------------------------
+    // Workbench
+    // ---------------------------------------------------------------
+    "workbench.activityBar.location": "top",
+    "workbench.editor.enablePreview": false,
+    "workbench.editor.tabSizing": "shrink",
+    "workbench.editor.showIcons": false,
+    "workbench.editor.decorations.badges": false,
+    "workbench.tree.indent": 24,
+    "workbench.tree.renderIndentGuides": "always",
+    "breadcrumbs.icons": false,
+    "explorer.decorations.colors": false,
+    "terminal.integrated.tabs.enabled": false,
+
+    "remote.autoForwardPortsSource": "hybrid"
+}

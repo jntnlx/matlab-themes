@@ -1,0 +1,65 @@
+# Iosevka Quill: Iosevka redrawn to Courier New's proportions.
+#
+# Courier New measures: 0.600 em cell, x-height 0.423 em, stems ~0.040 em.
+# Stock Iosevka:        0.500 em cell, x-height 0.520 em, stems ~0.040 em at ExtraLight.
+#
+# Kept from Iosevka: distinct 0/O, 1/l/I, careful punctuation, ttfautohint hinting.
+# Taken from Courier: slab serifs, the wide cell, a low x-height, hairline stems.
+#
+# Not built or tested yet. Build with the "Build Iosevka Quill" workflow,
+# or locally per https://github.com/be5invis/Iosevka/blob/main/doc/custom-build.md
+
+[buildPlans.IosevkaQuill]
+family = "Iosevka Quill"
+spacing = "normal"
+serifs = "slab"
+noLigation = true
+exportGlyphNames = false
+
+[buildPlans.IosevkaQuill.variants.design]
+a = "double-storey-serifed"
+g = "single-storey-serifed"
+i = "serifed"
+l = "serifed"
+r = "serifed"
+one = "base"
+zero = "oval-dotted"       # Courier's oval, with a dot so 0 and O never collide
+asterisk = "penta-high"    # raised, as in Courier
+
+# One upright width, Courier's 600-unit cell.
+[buildPlans.IosevkaQuill.widths.Normal]
+shape = 600
+menu = 5
+css = "normal"
+
+# Stroke weight. 210 lands near Courier New's stems at this width and
+# x-height; raise toward 260 if it greys out on the Sepia background.
+[buildPlans.IosevkaQuill.weights.Regular]
+shape = 210
+menu = 400
+css = 400
+
+[buildPlans.IosevkaQuill.weights.Bold]
+shape = 420
+menu = 700
+css = 700
+
+[buildPlans.IosevkaQuill.slopes.Upright]
+angle = 0
+shape = "upright"
+menu = "upright"
+css = "normal"
+
+[buildPlans.IosevkaQuill.slopes.Italic]
+angle = 9.4
+shape = "italic"
+menu = "italic"
+css = "italic"
+
+# Courier-like vertical proportions. Iosevka defaults: cap 735, ascender 735,
+# xHeight 520. Courier New is ~570 / ~630 / 423; these sit between the two so
+# glyphs don't shrink as much as Courier's do at a given font size.
+[buildPlans.IosevkaQuill.metricOverride]
+cap = 650
+ascender = 690
+xHeight = 455

@@ -1,0 +1,11 @@
+build.mjs
+palettes.mjs
+settings/**
+fonts/**
+dist/**
+*.vsix
+node_modules/**
+.gitignore
+preview/**
+.github/**
+**/__pycache__/**

@@ -1,0 +1,37 @@
+{
+  "name": "matlab-themes",
+  "displayName": "MATLAB Themes",
+  "description": "MATLAB's default syntax colours for daytime, plus a dim sepia variant and a dark variant for the evening.",
+  "version": "1.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Themes"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "label": "MATLAB Light",
+        "uiTheme": "vs",
+        "path": "./themes/matlab-light-color-theme.json"
+      },
+      {
+        "label": "MATLAB Sepia",
+        "uiTheme": "vs",
+        "path": "./themes/matlab-sepia-color-theme.json"
+      },
+      {
+        "label": "MATLAB Sepia Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/matlab-sepia-dark-color-theme.json"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "package": "node build.mjs && npx --yes @vscode/vsce package --allow-missing-repository --no-rewrite-relative-links --out dist/matlab-themes.vsix"
+  }
+}

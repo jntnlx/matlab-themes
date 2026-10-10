@@ -1,0 +1,33 @@
+# Builds the custom font in fonts/iosevka-quill from Iosevka's source.
+# Manual only: Actions tab -> "Build Iosevka Quill" -> Run workflow.
+# The TTFs appear as a downloadable artifact on the run page (~10-20 min).
+name: Build Iosevka Quill
+
+on:
+  workflow_dispatch:
+    inputs:
+      iosevka_ref:
+        description: Iosevka tag to build from
+        default: v34.9.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: be5invis/Iosevka
+          ref: ${{ inputs.iosevka_ref }}
+          path: iosevka
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y ttfautohint
+      - run: cp fonts/iosevka-quill/private-build-plans.toml iosevka/
+      - working-directory: iosevka
+        run: npm ci && npm run build -- ttf::IosevkaQuill
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IosevkaQuill-ttf
+          path: iosevka/dist/IosevkaQuill/TTF/*.ttf
