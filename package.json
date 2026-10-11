@@ -1,8 +1,8 @@
 {
   "name": "matlab-themes",
   "displayName": "MATLAB Themes",
-  "description": "MATLAB's default syntax colours for daytime, plus a dim sepia variant and a dark variant for the evening.",
-  "version": "1.1.0",
+  "description": "MATLAB's default syntax colours for daytime, plus a dim sepia variant and a dark variant for the evening, with a brightness control.",
+  "version": "1.2.0",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -16,19 +16,56 @@
       {
         "label": "MATLAB Light",
         "uiTheme": "vs",
-        "path": "./themes/matlab-light-color-theme.json"
+        "path": "./themes/matlab-light-color-theme.json",
+        "_watch": true
       },
       {
         "label": "MATLAB Sepia",
         "uiTheme": "vs",
-        "path": "./themes/matlab-sepia-color-theme.json"
+        "path": "./themes/matlab-sepia-color-theme.json",
+        "_watch": true
       },
       {
         "label": "MATLAB Sepia Dark",
         "uiTheme": "vs-dark",
-        "path": "./themes/matlab-sepia-dark-color-theme.json"
+        "path": "./themes/matlab-sepia-dark-color-theme.json",
+        "_watch": true
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "matlabThemes.setBrightness",
+        "title": "Set Brightness…",
+        "category": "MATLAB Themes"
+      },
+      {
+        "command": "matlabThemes.brighter",
+        "title": "Brighter (+5%)",
+        "category": "MATLAB Themes"
+      },
+      {
+        "command": "matlabThemes.dimmer",
+        "title": "Dimmer (−5%)",
+        "category": "MATLAB Themes"
+      }
+    ],
+    "configuration": {
+      "title": "MATLAB Themes",
+      "properties": {
+        "matlabThemes.brightness": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 60,
+          "maximum": 100,
+          "markdownDescription": "Brightness of the MATLAB themes in percent. Scales every colour's lightness, matching the brightness slider of the MATLAB Themes for the Web extension. Also available from the status bar."
+        },
+        "matlabThemes.reloadWindow": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Reload the window after a brightness change. Only needed in editors that don't re-apply a changed theme file live; disables the live preview."
+        }
+      }
+    }
   },
   "scripts": {
     "build": "node build.mjs",
@@ -37,5 +74,13 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/jntnlx/matlab-themes"
-  }
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ]
 }

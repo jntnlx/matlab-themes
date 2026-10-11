@@ -11,6 +11,9 @@
     "window.autoDetectColorScheme": false,
     "workbench.preferredLightColorTheme": "MATLAB Light",
     "workbench.preferredDarkColorTheme": "MATLAB Sepia",
+    // Brightness (60-100), normally set from the status bar item;
+    // matches the browser extension's brightness slider.
+    // "matlabThemes.brightness": 100,
     "workbench.iconTheme": "vs-seti",
 
     // ---------------------------------------------------------------

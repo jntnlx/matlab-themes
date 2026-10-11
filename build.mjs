@@ -2,7 +2,7 @@
 //   npm run build     regenerate theme JSON
 //   npm run package   regenerate + build the .vsix
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import palettes from "./palettes.mjs";
 
 // ---------------------------------------------------------------------------
@@ -445,6 +445,7 @@ function tokenColors(p) {
 
 // ---------------------------------------------------------------------------
 
+mkdirSync("themes/base", { recursive: true });
 for (const p of palettes) {
   const theme = {
     $schema: "vscode://schemas/color-theme",
@@ -455,7 +456,11 @@ for (const p of palettes) {
     colors: { ...colors(p), ...(p.overrides ?? {}) },
     tokenColors: tokenColors(p),
   };
-  writeFileSync(`themes/${p.file}`, JSON.stringify(theme, null, 2) + "\n");
+  // themes/base/ holds the designed colours; extension.js derives the live
+  // themes/ files from it when the brightness setting is below 100%
+  const text = JSON.stringify(theme, null, 2) + "\n";
+  writeFileSync(`themes/base/${p.file}`, text);
+  writeFileSync(`themes/${p.file}`, text);
   console.log(`wrote themes/${p.file}  (${Object.keys(theme.colors).length} colours, ${theme.tokenColors.length} token rules)`);
 }
 
@@ -465,5 +470,8 @@ pkg.contributes.themes = palettes.map((p) => ({
   label: p.name,
   uiTheme: p.type === "dark" ? "vs-dark" : "vs",
   path: `./themes/${p.file}`,
+  // VS Code re-applies a watched theme when its file changes, which is how
+  // the brightness setting takes effect without a window reload
+  _watch: true,
 }));
 writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
