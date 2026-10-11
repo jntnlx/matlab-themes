@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="popup.css">
+<main>
+  <header>
+    <h1>MATLAB Sepia</h1>
+    <label class="switch" title="Turn off everywhere">
+      <input type="checkbox" id="enabled"><span></span>
+    </label>
+  </header>
+
+  <section>
+    <p class="host" id="host">this site</p>
+    <div class="seg" role="radiogroup" aria-label="Mode for this site" id="mode">
+      <button type="button" role="radio" data-v="auto" title="Tone-map light pages, leave dark pages alone">Auto</button>
+      <button type="button" role="radio" data-v="on" title="Tone-map even if the page looks dark">On</button>
+      <button type="button" role="radio" data-v="filter" title="Pixel filter: for canvas apps the tone map can't reach">Filter</button>
+      <button type="button" role="radio" data-v="off">Off</button>
+    </div>
+    <p class="status" id="status"></p>
+  </section>
+
+  <label class="row"><input type="checkbox" id="dimImages"> Dim images and video</label>
+</main>
+<script src="palette.js"></script>
+<script src="popup.js"></script>

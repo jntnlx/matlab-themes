@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "MATLAB Sepia for the Web",
+  "short_name": "MATLAB Sepia",
+  "version": "1.0.0",
+  "description": "Dims light web pages to the MATLAB Sepia palette by tone-mapping their CSS colours. Text stays crisp; images are dimmed, not recoloured.",
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_popup": "popup.html", "default_icon": { "16": "icons/16.png", "48": "icons/48.png" } },
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["palette.js", "colour.js", "engine.js", "content.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ]
+}
