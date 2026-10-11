@@ -1,62 +1,102 @@
-# MATLAB Sepia for the Web
+# MATLAB Themes for the Web
 
-A Chromium extension (Helium, Chrome, Edge, Brave) that dims light web pages to the same palette as the **MATLAB Sepia** editor theme: page white becomes `#B3AC9F`, near-black text becomes `#1A1A18`, and accent colours keep their hue.
+A Chromium extension (Helium, Chrome, Edge, Brave) that matches web pages to the three editor themes, so the browser next to VS Code always looks like the same window.
+
+| Theme | Light pages become | Notes |
+|---|---|---|
+| **Light** | unchanged | Image dimming and the brightness slider only |
+| **Sepia** | `#B3AC9F` page, `#1A1A18` text | Same calibration as the editor theme |
+| **Dark** | `#1C1C1C` page, `#D2D2D0` text | Lightness flips; hue is kept |
+| **System** | Light or Sepia | Follows the OS setting, like VS Code's `autoDetectColorScheme` |
+
+`Alt+Shift+T` cycles Light → Sepia → Dark. You can rebind it at `chrome://extensions/shortcuts`.
 
 ## Install
 
-1. Get this folder onto your computer (clone the repo or unzip `matlab-sepia-web.zip`).
-2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `browser` folder.
-3. Pin the extension. Its popup has per-site modes:
+1. Get this folder onto your computer (clone the repo or unzip `matlab-themes-web.zip`).
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `browser` folder. To update, replace the folder and click the reload icon on the extension's card.
+3. Pin the extension. The popup also has per-site controls:
 
-| Mode | What it does |
+| Control | What it does |
 |---|---|
-| **Auto** (default) | Tone-maps light pages; leaves pages that are already dark alone |
-| **On** | Tone-maps even if the page looks dark |
-| **Filter** | A pixel filter with the same white point, for canvas-drawn apps (Google Docs, Figma) the tone map can't reach |
+| **Auto** (default) | Themes light pages; leaves pages that are already dark alone |
+| **On** | Themes even if the page looks dark |
+| **Filter** | A pixel filter with the same end points, for canvas-drawn apps (Google Docs, Figma) the tone map can't reach |
 | **Off** | Nothing |
+| **Map inline colours** | Also maps colours written on elements themselves: `style=""`, SVG `fill`/`stroke`, legacy `bgcolor` and `<font color>`. On by default; switch it off for a site if it slows down |
+| **Brightness** | Scales the whole result, in any theme |
+| **Dim images and video** | Dims rather than recolours media |
 
-On claude.ai, set Settings → Appearance → Light. Auto skips claude.ai's dark mode by design.
+On claude.ai, keep Settings → Appearance on **Light** and pick the look here.
 
-## How it works, and why it beats Dark Reader here
+## How it works
 
-Dark Reader's dynamic mode **inverts** pages, so for every colour it has to guess whether it's a background or text. On sites built with modern CSS (claude.ai uses `hsl(from var(--x) h s l / 10%)`, cascade layers and nested rules) that guess fails, which gives dark text on a dark background.
+Dark Reader's dynamic mode guesses, for every colour, whether it's a background or text. On modern CSS (claude.ai uses `hsl(from var(--x) h s l / 10%)`, cascade layers and nested rules) the guess fails and text disappears.
 
-This extension doesn't invert. It maps **light to dim-light** with one monotonic curve in OKLab:
+This extension maps every colour through one smooth curve in OKLab, with no per-colour guess:
 
 ```
-L' = c + k·L          white -> bg, UI black (L 0.2) -> fg
-ab' = ab·0.85 + sepia cast·(L'/L_bg)
+k  = (L_bg - L_fg) / (1 - L_text)
+L' = (L_bg + k·(L - 1)) · brightness
 ```
 
-Whatever was lighter stays lighter, so no colour needs a role. For each stylesheet the engine writes an override sheet right after it, with the same selectors, `@layer` / `@media` / `@supports` wrappers and `!important` flags. The page's own cascade still decides which rule wins; only the values differ.
+- **Light:** k = 1, the identity.
+- **Sepia:** 0 < k < 1, so lightness is compressed toward the dim background.
+- **Dark:** k < 0, so lightness flips.
+
+The lightness gap between any two colours keeps its proportion, so text that was readable stays readable.
+
+Sepia Dark adds two rules a pure flip gets wrong:
+- Saturated mid-tones (buttons, badges, coloured text) stay light instead of flipping, so white-on-blue becomes dark-on-blue rather than dark-on-dark-blue.
+- Translucent black (shadows, scrims) stays dark instead of turning into a glow.
+
+For each stylesheet the engine writes an override sheet directly after it, with the same selectors, the same `@layer` / `@media` / `@supports` wrappers and the same `!important` flags. The page's own cascade still decides which rule wins; only the values change.
 
 Handled:
 - hex, `rgb()`, `hsl()`, `oklch()`, `oklab()`, named colours
-- bare `H S% L%` and `R G B` design tokens (Tailwind, shadcn, claude.ai)
+- bare `H S% L%` / `R G B` design tokens
 - `@property` initial values
 - cross-origin stylesheets, fetched by the extension
 - rules added at runtime with `insertRule`
-- unstyled pages, form controls and links
-- frames, including claude.ai artifacts
-
-Images and video are dimmed with a light filter rather than recoloured (toggle in the popup).
+- unstyled pages and form controls
+- inline colours
+- frames
 
 Not handled:
-- colours in inline `style=""` attributes or SVG `fill=""` attributes
 - shadow DOM
 - `@keyframes`
-- canvas content (use Filter mode for that)
+- canvas content (use Filter for that)
+- background images with baked-in white
+
+## When a site looks wrong
+
+1. Open the popup on that page and click **Copy site report**. This copies a short JSON summary covering stylesheets read, cross-origin fetches, inline colours, and canvases or shadow roots found.
+2. Paste it to Claude with a screenshot.
+3. The fix goes into `sites.js`:
+
+```js
+"example.com": {
+  note:   "why this entry exists",
+  mode:   "filter",          // default mode for the site
+  inline: false,             // turn inline-colour mapping off/on
+  css:    ".header { background: var(--ms-bg2) !important; }",
+  themes: { dark: "..." },   // CSS for one theme only
+}
+```
+
+Fix CSS is appended last and can use `--ms-bg`, `--ms-fg`, `--ms-bg2`, `--ms-line`, `--ms-muted` and `--ms-accent` from the active theme. Entries match a hostname and its subdomains.
 
 ## Files
 
 ```
 manifest.json   MV3 manifest
 palette.js      generated by ../build.mjs from palettes.mjs; do not edit
-colour.js       colour parsing and the tone map
-engine.js       stylesheet mirroring, dark-page detection, filter mode
+sites.js        per-site fixes
+colour.js       colour parsing and the tone maps
+engine.js       stylesheet mirroring, inline colours, dark-page detection, filter mode
 content.js      settings glue
-background.js   fetches cross-origin CSS
-popup.*         per-site controls
+background.js   cross-origin CSS, injection into open tabs, theme shortcut
+popup.*         controls, drawn in the active theme
 ```
 
-Change the palette in `../palettes.mjs` (`matlabSepia.bg` / `fg`), run `npm run build`, then click reload on the extension card.
+To change a palette, edit `../palettes.mjs`, run `npm run build`, then reload the extension.

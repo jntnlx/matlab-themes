@@ -1,12 +1,11 @@
-// Colour parsing and the sepia tone map.
+// Colour parsing and the theme tone maps.
 //
-// The tone map works in OKLab and is monotonic in lightness, so whatever
-// was lighter stays lighter. That is why it needs no knowledge of which
-// colours are backgrounds and which are text (the guess Dark Reader's
-// dynamic mode has to make, and gets wrong on modern CSS).
-//
-//   L' = c + k·L        white -> palette bg, near-black text (L 0.2) -> palette fg
-//   ab' = ab·SAT + tint·(L'/L_bg)   hue kept, chroma eased, sepia cast added
+// Each tone map works in OKLab and is monotonic in lightness: increasing for
+// the light themes (lighter stays lighter), decreasing for the dark theme
+// (order flips). Either way the lightness gap between any two colours keeps
+// its proportion, so it needs no knowledge of which colours are backgrounds
+// and which are text, the guess Dark Reader's dynamic mode has to make and
+// gets wrong on modern CSS.
 //
 // Exposed as globalThis.MSColour.
 
@@ -126,23 +125,52 @@
   const r4 = (x) => +x.toFixed(4);
 
   // ---------------------------------------------------------------- tone map
-  function makeToneMap(pal) {
-    const [bgL, bgA, bgB] = rgbToOklab(parse(pal.bg).rgb);
-    const [fgL] = rgbToOklab(parse(pal.fg).rgb);
-    const REF_TEXT_L = 0.2; // typical UI "black" (#111..#1c1c1c)
-    const k = (bgL - fgL) / (1 - REF_TEXT_L);
-    const c = bgL - k;
-    const SAT = pal.saturation ?? 0.85;
+  // One formula for every theme. With k = (L_bg - L_fg) / (1 - ref):
+  //   L' = (L_bg + k·(L - 1)) · brightness
+  // so page white lands on bg and text of lightness `ref` lands on fg.
+  //   MATLAB Light  bg white, fg black, ref 0  -> k = 1: identity
+  //   MATLAB Sepia  dim bg, ref 0.2           -> 0 < k < 1: compressed
+  //   Sepia Dark    dark bg, light fg          -> k < 0: lightness flips
+  // Hue is kept; chroma is scaled by `saturation`, and the cast of bg/fg is
+  // blended in according to where the colour lands between them.
+  const smooth = (e0, e1, x) => { const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+  const MID_FLOOR = 0.62;
+
+  function makeToneMap(theme, brightness = 1) {
+    const [bgL, bgA, bgB] = rgbToOklab(parse(theme.bg).rgb);
+    const [fgL, fgA, fgB] = rgbToOklab(parse(theme.fg).rgb);
+    const ref = theme.refText ?? 0.2;
+    const k = (bgL - fgL) / (1 - ref);
+    const SAT = theme.saturation ?? 1;
+    const invert = k < 0;
+    const identity = Math.abs(k - 1) < 1e-6 && Math.abs(bgL - 1) < 1e-3 && SAT === 1 &&
+      Math.hypot(bgA, bgB, fgA, fgB) < 1e-3 && brightness === 1;
     const cache = new Map();
 
-    function mapRgb(rgb) {
-      const key = rgb.join(",");
+    function mapRgb(rgb, alpha = 1) {
+      const key = rgb.join(",") + "/" + (alpha < 1 ? 1 : 0);
       let out = cache.get(key);
       if (!out) {
         const [L, a, b] = rgbToOklab(rgb);
-        const L2 = c + k * L;
-        const w = Math.max(0, L2 / bgL);
-        out = fromOklabClipped(L2, a * SAT + bgA * w, b * SAT + bgB * w);
+        if (invert && alpha < 1 && L < 0.5) {
+          // translucent black is a shadow, scrim or hover darkening: it should
+          // stay dark on a dark page rather than turn into a light glow
+          out = rgb;
+        } else {
+          let L2 = Math.min(1, Math.max(0, bgL + k * (L - 1)));
+          if (invert) {
+            // Saturated mid-tones (buttons, badges, links, coloured text) are
+            // not flipped like greys: on a dark page they read best kept light.
+            // White text on a blue button turns dark and stays legible; blue
+            // text stays light against the dark background. Pale tints and
+            // near-greys still flip.
+            const C = Math.hypot(a, b);
+            const w = smooth(0.05, 0.11, C) * smooth(0.25, 0.35, L) * (1 - smooth(0.78, 0.88, L));
+            L2 += (Math.max(L, MID_FLOOR) - L2) * w;
+          }
+          const t = Math.min(1.25, Math.max(-0.25, (L2 - bgL) / (fgL - bgL)));
+          out = fromOklabClipped(L2 * brightness, a * SAT + bgA + (fgA - bgA) * t, b * SAT + bgB + (fgB - bgB) * t);
+        }
         cache.set(key, out);
       }
       return out;
@@ -152,7 +180,8 @@
     function mapLiteral(str) {
       const p = parse(str);
       if (!p) return null;
-      return toHex(mapRgb(p.rgb), p.a ?? 1);
+      const a = p.a ?? 1;
+      return toHex(mapRgb(p.rgb, a), a);
     }
 
     // bare "H S% L%" components (Tailwind / shadcn style tokens)
@@ -165,7 +194,8 @@
     function mapComponents(name, value) {
       let m = value.match(HSL_COMPS);
       if (m) {
-        const rgb = mapRgb(hslToRgb(+m[1], +m[3] / 100, +m[4] / 100));
+        const alpha = m[5] ? num(m[5], 1) : 1;
+        const rgb = mapRgb(hslToRgb(+m[1], +m[3] / 100, +m[4] / 100), alpha);
         const [h, s, l] = rgbToHsl(rgb);
         return `${r4(h)} ${r4(s * 100)}% ${r4(l * 100)}%` + (m[5] ? ` / ${m[5]}` : "");
       }
@@ -176,15 +206,24 @@
       return null;
     }
 
-    // filter() fallback with the same white point: brightness(b) sepia(s)
-    // sepia row sums are R 1+.351s, G 1+.203s, B 1-.063s
-    const bgRgb = parse(pal.bg).rgb;
-    const ratio = bgRgb[2] / bgRgb[0];
-    const sep = clamp01((1 - ratio) / (0.063 + 0.351 * ratio));
-    const bri = bgRgb[0] / (1 + 0.351 * sep);
-    const filter = `brightness(${r4(bri)}) sepia(${r4(sep)})`;
+    // Pixel-filter fallback with the same end points.
+    const bg = parse(theme.bg).rgb, fg = parse(theme.fg).rgb;
+    let filter, mediaFilter = "";
+    if (invert) {
+      // invert, then contrast/brightness so white -> bg and black -> fg;
+      // media get a second inversion so photos come out the right way round
+      const br = bg[0] + fg[0], ct = (fg[0] - bg[0]) / br;
+      filter = `invert(1) hue-rotate(180deg) contrast(${r4(ct)}) brightness(${r4(br * brightness)})`;
+      mediaFilter = "invert(1) hue-rotate(180deg)";
+    } else {
+      // sepia row sums are R 1+.351s, G 1+.203s, B 1-.063s
+      const ratio = bg[2] / bg[0];
+      const sep = clamp01((1 - ratio) / (0.063 + 0.351 * ratio));
+      const bri = bg[0] / (1 + 0.351 * sep);
+      filter = `brightness(${r4(bri * brightness)})` + (sep > 0.005 ? ` sepia(${r4(sep)})` : "");
+    }
 
-    return { mapRgb, mapLiteral, mapComponents, filter, toHex };
+    return { mapRgb, mapLiteral, mapComponents, filter, mediaFilter, identity, invert, toHex };
   }
 
   // ---------------------------------------------------------------- value rewriting

@@ -6,8 +6,11 @@
 // order means each override wins exactly where its original won, so the
 // page's own cascade decides everything; only the colour values change.
 //
+// Optional: colours written on elements themselves (style="", SVG fill/stroke,
+// legacy bgcolor / <font color>), and per-site fix CSS from sites.js.
+//
 // Exposed as globalThis.MSEngine. Usable without the extension APIs, which is
-// how it is tested: MSEngine.start({ palette, mode: "auto" }).
+// how it is tested: MSEngine.start({ theme: MS_THEMES.sepia, mode: "auto" }).
 
 (() => {
   "use strict";
@@ -21,8 +24,23 @@
   let map = null;
   let opts = null;
   let active = false;
-  const done = new WeakMap(); // owner node / sheet -> { style, ruleCount, text }
-  let baseStyle, imgStyle, filterStyle;
+  let done = new WeakMap(); // owner node -> { style, ruleCount, text, fetched }
+  const own = {};          // our singleton style elements: base, images, site, filter
+  const stats = { sheets: 0, mirrored: 0, fetched: 0, unreadable: 0, bytes: 0, inline: 0, skippedDark: false };
+
+  const head = () => document.head || document.documentElement;
+  function ownStyle(key, text, where = "append") {
+    let el = own[key];
+    if (!el) { el = own[key] = document.createElement("style"); el.setAttribute(ATTR, key); }
+    if (el.textContent !== text) el.textContent = text;
+    const h = head();
+    // tail styles only move when something other than our own styles follows
+    // them, so repeated calls cause no DOM churn (and no observer feedback)
+    const next = el.nextElementSibling;
+    const misplaced = el.parentNode !== h || (where === "prepend" ? h.firstChild !== el : next && !next.hasAttribute(ATTR));
+    if (misplaced) h[where](el);
+    return el;
+  }
 
   // ------------------------------------------------------------ CSS mirroring
   const absolutise = (v, base) =>
@@ -87,7 +105,6 @@
     return out;
   }
 
-  // ------------------------------------------------------------ sheet handling
   function overrideFor(owner) {
     let rec = done.get(owner);
     if (!rec) {
@@ -98,6 +115,7 @@
     }
     if (owner.media) rec.style.media = owner.media;
     if (rec.style.previousSibling !== owner) owner.after(rec.style);
+    rec.style.disabled = !active;
     return rec;
   }
 
@@ -129,21 +147,24 @@
       cs.replaceSync(text.replace(/@import[^;]+;/g, ""));
       rec.ruleCount = -1;
       writeOverride(owner, cs, sheet.href);
-    } catch { /* leave unthemed */ }
+      rec.viaFetch = true;
+    } catch { rec.failed = true; }
   }
 
   const owners = () => document.querySelectorAll(`style:not([${ATTR}]), link[rel~="stylesheet"]`);
-
-  function processAll() { owners().forEach(processOwner); }
+  function processAll() {
+    owners().forEach(processOwner);
+    if (own.site) ownStyle("site", own.site.textContent); // keep site fixes last
+    if (own.images) ownStyle("images", own.images.textContent);
+  }
 
   // ------------------------------------------------------------ base styles
-  // colours the browser itself supplies (canvas white, black text, link blue,
-  // unstyled form controls). Inserted first so any page rule beats them.
-  // Wrapped in a cascade layer declared before any of the page's own: layered
-  // and unlayered page rules both beat it, whatever their specificity.
+  // Colours the browser itself supplies (canvas white, black text, link blue,
+  // unstyled form controls), in a cascade layer declared before any of the
+  // page's own: layered and unlayered page rules both beat it.
   function baseCss() {
     const T = (c) => map.mapLiteral(c);
-    return `@layer matlab-sepia-base{:root{background-color:${T("#fff")};color:${T("#000")};scrollbar-color:${T("#c1c1c1")} ${T("#f1f1f1")}}
+    return `@layer matlab-sepia-base{:root{background-color:${T("#fff")};color:${T("#000")};scrollbar-color:${T("#c1c1c1")} ${T("#f1f1f1")}${map.invert ? ";color-scheme:dark" : ""}}
 :link{color:${T("#0000ee")}}:visited{color:${T("#551a8b")}}
 input,textarea,select{background-color:${T("#fff")};color:${T("#000")};border-color:${T("#767676")}}
 button,input[type=button],input[type=submit],input[type=reset]{background-color:${T("#efefef")};color:${T("#000")};border-color:${T("#767676")}}
@@ -151,16 +172,87 @@ button,input[type=button],input[type=submit],input[type=reset]{background-color:
 mark{background-color:${T("#ffff00")};color:${T("#000")}}}`;
   }
 
-  function ensureBase() {
-    baseStyle ??= Object.assign(document.createElement("style"), { textContent: baseCss() });
-    baseStyle.setAttribute(ATTR, "base");
-    const head = document.head || document.documentElement;
-    if (baseStyle.parentNode !== head || head.firstChild !== baseStyle) head.prepend(baseStyle);
+  // per-site fixes can use these variables
+  function siteCss() {
+    if (!opts.siteCss) return "";
+    const u = opts.theme.ui || {};
+    return `:root{--ms-bg:${opts.theme.bg};--ms-fg:${opts.theme.fg};--ms-bg2:${u.bg2};--ms-line:${u.line};--ms-muted:${u.muted};--ms-accent:${u.sel}}\n${opts.siteCss}`;
+  }
 
-    imgStyle ??= document.createElement("style");
-    imgStyle.setAttribute(ATTR, "images");
-    imgStyle.textContent = opts.dimImages ? `img,video,canvas,picture,svg image{filter:${opts.imageFilter}}` : "";
-    if (!imgStyle.isConnected) (document.head || document.documentElement).append(imgStyle);
+  function imagesCss() {
+    return opts.dimImages ? `img,video,canvas,picture,svg image{filter:${opts.theme.imageFilter}}` : "";
+  }
+
+  // ------------------------------------------------------------ inline colours
+  const INLINE_SEL = "[style],[fill],[stroke],[stop-color],[flood-color],[bgcolor],font[color],body[text],body[link],body[vlink],body[alink]";
+  const INLINE_ATTRS = ["fill", "stroke", "stop-color", "flood-color", "bgcolor", "color", "text", "link", "vlink", "alink"];
+  const STYLE_HINT = /colou?r|background|border|fill|stroke|shadow|outline|--/i;
+  let inlineRecs = new Map(); // element -> { style:[orig, mapped], attrs:{ name:[orig, mapped] } }
+
+  const legacyHex = (v) => (/^[0-9a-f]{6}$/i.test(v) ? "#" + v : v);
+
+  function mapElement(el) {
+    let rec = inlineRecs.get(el);
+    const st = el.getAttribute("style");
+    if (st && STYLE_HINT.test(st) && !(rec?.style && st === rec.style[1])) {
+      const d = el.style, todo = [];
+      for (let i = 0; i < d.length; i++) {
+        const p = d[i];
+        if (!p.startsWith("--") && !COLOUR_PROP.test(p)) continue;
+        const v = d.getPropertyValue(p);
+        const nv = v && rewriteValue(map, p, v);
+        if (nv && nv !== v) todo.push([p, nv, d.getPropertyPriority(p)]);
+      }
+      if (todo.length) {
+        rec ??= { attrs: {} };
+        rec.style = [st, null];
+        for (const [p, v, pr] of todo) d.setProperty(p, v, pr);
+        rec.style[1] = el.getAttribute("style");
+      }
+    }
+    for (const a of INLINE_ATTRS) {
+      if (!el.hasAttribute(a)) continue;
+      if (a === "color" && el.nodeName !== "FONT" && el.nodeName !== "HR" && !(el instanceof SVGElement)) continue;
+      if ((a === "text" || a === "link" || a === "vlink" || a === "alink") && el.nodeName !== "BODY") continue;
+      const v = el.getAttribute(a);
+      if (rec?.attrs[a] && v === rec.attrs[a][1]) continue;
+      const nv = map.mapLiteral(legacyHex(v.trim()));
+      if (nv && nv !== v) {
+        rec ??= { attrs: {} };
+        rec.attrs[a] = [v, nv];
+        el.setAttribute(a, nv);
+      }
+    }
+    if (rec) inlineRecs.set(el, rec);
+  }
+
+  let inlineQueue = new Set(), inlineScheduled = false;
+  function queueInline(el) {
+    if (!opts.inline || !active) return;
+    inlineQueue.add(el);
+    if (!inlineScheduled) {
+      inlineScheduled = true;
+      requestAnimationFrame(() => {
+        inlineScheduled = false;
+        const q = inlineQueue; inlineQueue = new Set();
+        for (const el of q) if (el.isConnected) mapElement(el);
+        stats.inline = inlineRecs.size;
+      });
+    }
+  }
+  function scanInline(root = document) {
+    if (!opts.inline || !active) return;
+    if (root.matches?.(INLINE_SEL)) queueInline(root);
+    root.querySelectorAll?.(INLINE_SEL).forEach(queueInline);
+  }
+  function restoreInline() {
+    for (const [el, rec] of inlineRecs) {
+      if (!el.isConnected) continue;
+      if (rec.style && el.getAttribute("style") === rec.style[1]) el.setAttribute("style", rec.style[0]);
+      for (const [a, [o, m]] of Object.entries(rec.attrs)) if (el.getAttribute(a) === m) el.setAttribute(a, o);
+    }
+    inlineRecs = new Map();
+    stats.inline = 0;
   }
 
   // ------------------------------------------------------------ dark pages
@@ -174,11 +266,11 @@ mark{background-color:${T("#ffff00")};color:${T("#000")}}}`;
   }
 
   function setEnabled(on) {
+    const was = active;
     active = on;
-    document.querySelectorAll(`style[${ATTR}]`).forEach((s) => {
-      if (s === filterStyle) return;
-      s.disabled = !on;
-    });
+    document.querySelectorAll(`style[${ATTR}]`).forEach((s) => { s.disabled = !on; });
+    if (on && !was) scanInline();
+    if (!on && was) restoreInline();
   }
 
   let darkCheckTimer = 0;
@@ -186,8 +278,11 @@ mark{background-color:${T("#ffff00")};color:${T("#000")}}}`;
     if (opts.mode !== "auto") return;
     clearTimeout(darkCheckTimer);
     darkCheckTimer = setTimeout(() => {
-      setEnabled(false);
+      const prev = active;
+      document.querySelectorAll(`style[${ATTR}]`).forEach((s) => { s.disabled = true; });
       const dark = pageIsDark();
+      document.querySelectorAll(`style[${ATTR}]`).forEach((s) => { s.disabled = !prev; });
+      stats.skippedDark = dark;
       setEnabled(!dark);
     }, 60);
   }
@@ -196,58 +291,97 @@ mark{background-color:${T("#ffff00")};color:${T("#000")}}}`;
   let observer, poll;
 
   function startToneMap() {
-    ensureBase();
-    processAll();
+    active = true;
+    if (!map.identity) ownStyle("base", baseCss(), "prepend");
+    ownStyle("images", imagesCss());
+    if (opts.siteCss) ownStyle("site", siteCss());
+    if (!map.identity) processAll();
+    scanInline();
+
     observer = new MutationObserver((muts) => {
       let sheetsChanged = false, attrs = false;
       for (const m of muts) {
-        if (m.type === "attributes") { attrs = true; continue; }
         const t = m.target;
+        if (m.type === "attributes") {
+          if (t === document.documentElement || t === document.body) attrs = true;
+          if (opts.inline && m.attributeName !== "class" && m.attributeName !== "data-theme" && m.attributeName !== "data-mode") queueInline(t);
+          continue;
+        }
         if (t.nodeName === "STYLE" && !t.hasAttribute(ATTR)) { const r = done.get(t); if (r) r.ruleCount = -1; sheetsChanged = true; }
         for (const n of m.addedNodes) {
+          if (n.nodeType !== 1 || n.hasAttribute(ATTR)) continue;
           if (n.nodeName === "LINK") n.addEventListener("load", () => processOwner(n), { once: true });
           if (n.nodeName === "STYLE" || n.nodeName === "LINK" || n.nodeName === "HEAD" || n.nodeName === "BODY") sheetsChanged = true;
+          else if (opts.inline) scanInline(n);
         }
       }
-      if (sheetsChanged) { ensureBase(); processAll(); }
+      if (sheetsChanged && !map.identity) { ownStyle("base", baseCss(), "prepend"); processAll(); }
       if (attrs) checkDark();
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "data-theme", "data-mode", "style"] });
+    observer.observe(document.documentElement, {
+      childList: true, subtree: true, characterData: true, attributes: true,
+      attributeFilter: ["class", "data-theme", "data-mode", "style", ...(opts.inline ? INLINE_ATTRS : [])],
+    });
     // CSS-in-JS libraries add rules with insertRule(), which no observer sees
-    poll = setInterval(processAll, 1500);
-    const ready = () => { processAll(); checkDark(); };
+    if (!map.identity) poll = setInterval(processAll, 1500);
+    const ready = () => { if (!map.identity) processAll(); scanInline(); checkDark(); };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready, { once: true });
     else ready();
     window.addEventListener("load", ready, { once: true });
   }
 
   function startFilter() {
-    filterStyle ??= document.createElement("style");
-    filterStyle.setAttribute(ATTR, "filter");
-    filterStyle.textContent = `html{filter:${map.filter}!important;min-height:100vh}`;
-    (document.head || document.documentElement).append(filterStyle);
-    // pages without their own background would show unfiltered canvas white
-    baseStyle ??= Object.assign(document.createElement("style"), { textContent: "@layer matlab-sepia-base{:root{background-color:#fff}}" });
-    baseStyle.setAttribute(ATTR, "base");
-    (document.head || document.documentElement).prepend(baseStyle);
+    active = true;
+    ownStyle("base", "@layer matlab-sepia-base{:root{background-color:#fff}}", "prepend");
+    // media get the inverse of an inverting filter, then the usual dimming
+    const media = [map.mediaFilter, opts.dimImages && map.invert ? "brightness(.9)" : ""].filter(Boolean).join(" ");
+    ownStyle("filter", `html{filter:${map.filter}!important;min-height:100vh}` +
+      (media ? `img,video,picture,canvas,svg image,iframe{filter:${media}!important}` : ""));
+    if (opts.siteCss) ownStyle("site", siteCss());
   }
 
   function stop() {
-    observer?.disconnect(); clearInterval(poll);
+    observer?.disconnect(); clearInterval(poll); clearTimeout(darkCheckTimer);
+    restoreInline();
     document.querySelectorAll(`style[${ATTR}]`).forEach((s) => s.remove());
-    baseStyle = imgStyle = filterStyle = null;
+    for (const k of Object.keys(own)) delete own[k];
+    done = new WeakMap();
     active = false;
+    stats.skippedDark = false;
   }
 
   function start(o) {
     stop();
-    opts = { mode: "auto", dimImages: true, imageFilter: "brightness(.86) sepia(.12)", ...o };
+    opts = { mode: "auto", dimImages: true, brightness: 1, inline: false, ...o };
     if (opts.mode === "off") return;
-    map = makeToneMap(opts.palette);
+    map = makeToneMap(opts.theme, opts.brightness);
     if (opts.mode === "filter") return startFilter();
     startToneMap();
-    if (opts.mode === "on") setEnabled(true);
   }
 
-  globalThis.MSEngine = { start, stop, get active() { return active; }, _walk: (r) => walk(r, document.baseURI) };
+  function report() {
+    let sheets = 0, mirrored = 0, viaFetch = 0, failed = 0, bytes = 0;
+    owners().forEach((o) => {
+      sheets++;
+      const r = done.get(o);
+      if (r?.text) { mirrored++; bytes += r.text.length; }
+      if (r?.viaFetch) viaFetch++;
+      if (r?.failed) failed++;
+    });
+    const all = document.querySelectorAll("*");
+    let shadow = 0;
+    all.forEach((e) => { if (e.shadowRoot) shadow++; });
+    return {
+      url: location.origin + location.pathname,
+      theme: opts?.theme?.name, mode: opts?.mode, active, brightness: opts?.brightness,
+      skippedAsDark: stats.skippedDark,
+      stylesheets: { total: sheets, mirrored, fetchedCrossOrigin: viaFetch, unreadable: failed, overrideKB: Math.round(bytes / 1024) },
+      inline: { enabled: !!opts?.inline, mapped: inlineRecs.size, candidates: document.querySelectorAll(INLINE_SEL).length },
+      hardToReach: { shadowRoots: shadow, canvases: document.querySelectorAll("canvas").length, iframes: document.querySelectorAll("iframe").length },
+      pageBackground: getComputedStyle(document.body || document.documentElement).backgroundColor,
+      siteFix: !!opts?.siteCss,
+    };
+  }
+
+  globalThis.MSEngine = { start, stop, report, get active() { return active; } };
 })();

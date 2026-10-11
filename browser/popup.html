@@ -3,24 +3,45 @@
 <link rel="stylesheet" href="popup.css">
 <main>
   <header>
-    <h1>MATLAB Sepia</h1>
-    <label class="switch" title="Turn off everywhere">
-      <input type="checkbox" id="enabled"><span></span>
+    <h1>MATLAB Themes</h1>
+    <label class="switch" title="On or off everywhere">
+      <input type="checkbox" id="enabled" aria-label="Enabled everywhere"><span></span>
     </label>
   </header>
 
-  <section>
-    <p class="host" id="host">this site</p>
-    <div class="seg" role="radiogroup" aria-label="Mode for this site" id="mode">
-      <button type="button" role="radio" data-v="auto" title="Tone-map light pages, leave dark pages alone">Auto</button>
-      <button type="button" role="radio" data-v="on" title="Tone-map even if the page looks dark">On</button>
-      <button type="button" role="radio" data-v="filter" title="Pixel filter: for canvas apps the tone map can't reach">Filter</button>
+  <section class="block">
+    <h2>Theme</h2>
+    <div class="seg four" role="radiogroup" aria-label="Theme" id="theme">
+      <button type="button" role="radio" data-v="system" title="Follow the system: light → MATLAB Light, dark → MATLAB Sepia">System</button>
+      <button type="button" role="radio" data-v="light" title="MATLAB Light: pages as they are, dimming only">Light</button>
+      <button type="button" role="radio" data-v="sepia" title="MATLAB Sepia">Sepia</button>
+      <button type="button" role="radio" data-v="dark" title="MATLAB Sepia Dark">Dark</button>
+    </div>
+    <label class="slider" for="brightness">
+      <span>Brightness</span>
+      <input type="range" id="brightness" min="60" max="100" step="1">
+      <output id="brightnessOut" for="brightness"></output>
+    </label>
+  </section>
+
+  <section class="block">
+    <h2 id="host">This site</h2>
+    <div class="seg four" role="radiogroup" aria-label="Mode for this site" id="mode">
+      <button type="button" role="radio" data-v="auto" title="Theme light pages, leave pages that are already dark alone">Auto</button>
+      <button type="button" role="radio" data-v="on" title="Theme even if the page looks dark">On</button>
+      <button type="button" role="radio" data-v="filter" title="Pixel filter: for canvas-drawn apps the tone map can't reach">Filter</button>
       <button type="button" role="radio" data-v="off">Off</button>
     </div>
-    <p class="status" id="status"></p>
+    <p class="status" id="status" role="status"></p>
+    <label class="row"><input type="checkbox" id="inline"> Map inline colours on this site</label>
   </section>
 
   <label class="row"><input type="checkbox" id="dimImages"> Dim images and video</label>
+
+  <footer>
+    <button type="button" id="report" class="plain">Copy site report</button>
+    <span class="hint">Alt+Shift+T cycles themes</span>
+  </footer>
 </main>
 <script src="palette.js"></script>
 <script src="popup.js"></script>
