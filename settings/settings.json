@@ -16,9 +16,8 @@
     // ---------------------------------------------------------------
     // Fonts
     // MATLAB's own default code font on Windows is Courier New
-    // ("Monospaced" -> Courier New). Alternatives that keep its thin,
-    // wide texture: see fonts/ in this repo and the Code Font Bench.
-    // e.g. "'Source Code Pro Light', 'Courier New', monospace"
+    // ("Monospaced" -> Courier New). A close modern alternative:
+    // "'Source Code Pro Light', 'Courier New', monospace"
     // ---------------------------------------------------------------
     "editor.fontFamily": "'Courier New', Consolas, monospace",
     "editor.fontSize": 12,

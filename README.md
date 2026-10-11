@@ -1,6 +1,6 @@
 # MATLAB Themes
 
-Three VS Code / Antigravity colour themes built around MATLAB's syntax colours, plus a browser extension that matches web pages to all three.
+Three VS Code / Antigravity colour themes built around MATLAB's syntax colours.
 
 | Theme | Use | Background |
 |---|---|---|
@@ -24,8 +24,6 @@ build.mjs           turns palettes into themes/*.json and syncs package.json
 themes/             generated theme files
 dist/               packaged .vsix
 settings/           editor settings.json (no colours in it)
-fonts/              font notes, the Code Font Bench specimen, the Iosevka Quill build plan
-browser/            MATLAB Themes for the Web: Chromium extension (see browser/README.md)
 preview/            renders preview/themes.png
 ```
 
@@ -34,11 +32,9 @@ npm run build      # regenerate themes/*.json
 npm run package    # regenerate + build dist/matlab-themes.vsix
 ```
 
-## Browser and the Claude desktop app
+## Matching browser theme
 
-`browser/` is an unpacked Chromium extension that matches web pages to MATLAB Light, Sepia or Sepia Dark, claude.ai included, with image dimming, a brightness control and per-site fixes. See [browser/README.md](browser/README.md).
-
-The Claude desktop app has no supported way to restyle it. For a Sepia Claude window, open claude.ai in Helium as its own app window (⋮ → Cast, save and share → Install page as app, or Create shortcut with "Open as window"). The extension applies there. Keep the desktop app running in the background if you use it to link Claude to this computer.
+The companion browser extension, MATLAB Themes for the Web, lives in [jntnlx/browser-extensions](https://github.com/jntnlx/browser-extensions/tree/main/matlab-themes-web). Its colours are generated from `palettes.mjs` here.
 
 ## Where MATLAB Light's colours come from
 
